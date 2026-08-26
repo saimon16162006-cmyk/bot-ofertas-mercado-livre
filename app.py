@@ -129,6 +129,35 @@ def get_access_token():
     return access_token
 
 
+@app.route("/me")
+def me():
+    try:
+        token = get_access_token()
+
+        if not token:
+            return jsonify({
+                "erro": "Mercado Livre ainda não autorizado."
+            }), 401
+
+        response = requests.get(
+            "https://api.mercadolibre.com/users/me",
+            headers={
+                "Authorization": f"Bearer {token}"
+            },
+            timeout=30
+        )
+
+        return jsonify({
+            "status": response.status_code,
+            "resposta": response.json()
+        })
+
+    except Exception as e:
+        return jsonify({
+            "erro": str(e)
+        }), 500
+
+
 @app.route("/")
 def home():
     return """
