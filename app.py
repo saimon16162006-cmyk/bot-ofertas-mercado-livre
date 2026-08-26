@@ -217,7 +217,60 @@ def status():
             "autorizado": False,
             "erro": str(e)
         }), 500
+@app.route("/produtos")
+def produtos():
+    try:
+        token = get_access_token()
 
+        if not token:
+            return jsonify({
+                "erro": "Mercado Livre ainda não autorizado."
+            }), 401
+
+        termo = request.args.get("q", "iphone")
+
+        response = requests.get(
+            "https://api.mercadolibre.com/products/search",
+            headers={
+                "Authorization": f"Bearer {token}"
+            },
+            params={
+                "status": "active",
+                "site_id": "MLB",
+                "q": termo
+            },
+            timeout=30
+        )
+
+        if not response.ok:
+            return jsonify({
+                "erro": "Erro ao buscar produtos.",
+                "status": response.status_code,
+                "resposta": response.text
+            }), response.status_code
+
+        data = response.json()
+
+        produtos_encontrados = []
+
+        for produto in data.get("results", [])[:10]:
+            produtos_encontrados.append({
+                "id": produto.get("id"),
+                "nome": produto.get("name"),
+                "status": produto.get("status"),
+                "dominio": produto.get("domain_id")
+            })
+
+        return jsonify({
+            "busca": termo,
+            "quantidade": len(produtos_encontrados),
+            "produtos": produtos_encontrados
+        })
+
+    except Exception as e:
+        return jsonify({
+            "erro": str(e)
+        }), 500
 create_table()
 if __name__ == "__main__":
     create_table()
