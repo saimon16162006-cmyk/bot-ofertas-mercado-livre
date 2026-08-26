@@ -282,12 +282,13 @@ def produtos():
         produtos_encontrados = []
 
         for produto in data.get("results", [])[:10]:
-            produtos_encontrados.append({
-                "id": produto.get("id"),
-                "nome": produto.get("name"),
-                "status": produto.get("status"),
-                "dominio": produto.get("domain_id")
-            })
+    produtos_encontrados.append({
+        "id": produto.get("id"),
+        "nome": produto.get("name"),
+        "status": produto.get("status"),
+        "dominio": produto.get("domain_id"),
+        "link": produto.get("permalink")
+    })
 
         return jsonify({
             "busca": termo,
