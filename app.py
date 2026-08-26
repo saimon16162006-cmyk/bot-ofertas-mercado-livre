@@ -340,7 +340,7 @@ def links():
         }), 500
     
 if __name__ == "__main__":
-create_table()
+    create_table()
     port = int(os.environ.get("PORT", 10000))
 
     app.run(
