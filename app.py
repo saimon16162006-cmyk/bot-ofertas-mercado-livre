@@ -271,11 +271,11 @@ def produtos():
              timeout=30
          )
          if not response.ok:
-     return jsonify({
-        "erro": "Erro ao buscar produtos.",
-         "status": response.status_code,
-         "resposta": response.text
-     }), response.status_code
+             return jsonify({
+                 "erro": "Erro ao buscar produtos.",
+                 "status": response.status_code,
+                 "resposta": response.text
+             }), response.status_code
 
         data = response.json()
 
