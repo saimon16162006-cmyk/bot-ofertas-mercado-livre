@@ -258,19 +258,19 @@ def produtos():
 
         termo = request.args.get("q", "iphone")
 
-response = requests.get(
-    "https://api.mercadolibre.com/products/search",
-    headers={
-        "Authorization": f"Bearer {token}"
-    },
-    params={
-        "site_id": "MLB",
-        "status": "active",
-        "q": termo
-    },
-    timeout=30
-)
- if not response.ok:
+        response = requests.get(
+            "https://api.mercadolibre.com/products/search",
+             headers={
+                 "Authorization": f"Bearer {token}"
+             },
+             params={
+                 "site_id": "MLB",
+                 "status": "active",
+                 "q": termo
+             },
+             timeout=30
+         )
+         if not response.ok:
      return jsonify({
         "erro": "Erro ao buscar produtos.",
          "status": response.status_code,
