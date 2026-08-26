@@ -300,9 +300,47 @@ def produtos():
             "erro": str(e)
         }), 500
 create_table()
-if __name__ == "__main__":
-    create_table()
 
+   @app.route("/links")
+def links():
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, product_url, affiliate_url, product_name, created_at
+            FROM affiliate_links
+            ORDER BY id ASC
+        """)
+
+        rows = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        resultado = []
+
+        for row in rows:
+            resultado.append({
+                "id": row[0],
+                "product_url": row[1],
+                "affiliate_url": row[2],
+                "product_name": row[3],
+                "created_at": row[4].isoformat() if row[4] else None
+            })
+
+        return jsonify({
+            "quantidade": len(resultado),
+            "links": resultado
+        })
+
+    except Exception as e:
+        return jsonify({
+            "erro": str(e)
+        }), 500
+    
+if __name__ == "__main__":
+create_table()
     port = int(os.environ.get("PORT", 10000))
 
     app.run(
