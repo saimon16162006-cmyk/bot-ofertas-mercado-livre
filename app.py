@@ -262,14 +262,36 @@ def produtos():
         produtos_encontrados = []
 
         for produto in data.get("results", [])[:10]:
+            product_id = produto.get("id")
+            item_id = None
+            link = None
+
+            if product_id:
+                items_response = requests.get(
+                    f"https://api.mercadolibre.com/products/{product_id}/items",
+                    headers={
+                        "Authorization": f"Bearer {token}"
+                    },
+                    timeout=30
+                )
+
+                if items_response.ok:
+                    items_data = items_response.json()
+                    items = items_data.get("results", [])
+
+                    if items:
+                        item_id = items[0].get("item_id")
+                        if item_id:
+                            link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
+
             produtos_encontrados.append({
-                "id": produto.get("id"),
+                "id": product_id,
+                "item_id": item_id,
                 "nome": produto.get("name"),
                 "status": produto.get("status"),
                 "dominio": produto.get("domain_id"),
-                "link": produto.get("permalink")
+                "link": link
             })
-
         return jsonify({
             "busca": termo,
             "quantidade": len(produtos_encontrados),
