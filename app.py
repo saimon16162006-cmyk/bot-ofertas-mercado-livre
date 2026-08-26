@@ -277,12 +277,17 @@ def produtos():
 
                 if product_response.ok:
                     product_data = product_response.json()
+
                     winner = product_data.get("buy_box_winner")
 
                     if winner:
                         item_id = winner.get("item_id")
-                        if item_id:
-                            link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
+
+                    if item_id:
+                        link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
+                    else:
+                        link = product_data.get("permalink")
+
             produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
