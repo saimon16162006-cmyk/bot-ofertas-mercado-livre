@@ -266,24 +266,23 @@ def produtos():
             item_id = None
             link = None
 
-            if product_id:
-                items_response = requests.get(
-                    f"https://api.mercadolibre.com/products/{product_id}/items",
+              if product_id:
+                product_response = requests.get(
+                    f"https://api.mercadolibre.com/products/{product_id}",
                     headers={
                         "Authorization": f"Bearer {token}"
                     },
                     timeout=30
                 )
 
-                if items_response.ok:
-                    items_data = items_response.json()
-                    items = items_data.get("results", [])
+                if product_response.ok:
+                    product_data = product_response.json()
+                    winner = product_data.get("buy_box_winner")
 
-                    if items:
-                        item_id = items[0].get("item_id")
+                    if winner:
+                        item_id = winner.get("item_id")
                         if item_id:
                             link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
-
             produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
