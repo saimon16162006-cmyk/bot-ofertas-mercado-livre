@@ -301,7 +301,7 @@ def produtos():
         }), 500
 create_table()
 
-   @app.route("/links")
+@app.route("/links")
 def links():
     try:
         conn = get_connection()
