@@ -300,7 +300,61 @@ def produtos():
             "erro": str(e)
         }), 500
 create_table()
+@app.route("/adicionar-link", methods=["GET", "POST"])
+def adicionar_link():
+    if request.method == "GET":
+        return """
+        <h2>Adicionar link de afiliado</h2>
+        <form method="POST">
+            <p>Nome do produto:</p>
+            <input type="text" name="product_name" required>
 
+            <p>Link do produto:</p>
+            <input type="text" name="product_url" required>
+
+            <p>Link de afiliado:</p>
+            <input type="text" name="affiliate_url" required>
+
+            <br><br>
+            <button type="submit">Salvar produto</button>
+        </form>
+        """
+
+    product_name = request.form.get("product_name")
+    product_url = request.form.get("product_url")
+    affiliate_url = request.form.get("affiliate_url")
+
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO affiliate_links (
+                product_url,
+                affiliate_url,
+                product_name
+            )
+            VALUES (%s, %s, %s)
+        """, (
+            product_url,
+            affiliate_url,
+            product_name
+        ))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return """
+        <h2>Produto salvo com sucesso! ✅</h2>
+        <p><a href="/adicionar-link">Adicionar outro produto</a></p>
+        <p><a href="/links">Ver links cadastrados</a></p>
+        """
+
+    except Exception as e:
+        return jsonify({
+            "erro": str(e)
+        }), 500
 @app.route("/links")
 def links():
     try:
