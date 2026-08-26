@@ -229,15 +229,14 @@ def produtos():
 
         termo = request.args.get("q", "iphone")
 
-        response = requests.get(
-            "https://api.mercadolibre.com/products/search",
-            headers={
+       response = requests.get(
+    "https://api.mercadolibre.com/sites/MLB/search",
                 "Authorization": f"Bearer {token}"
             },
             params={
-                "status": "active",
-                "site_id": "MLB",
-                "q": termo
+    "q": termo,
+    "limit": 10
+},
             },
             timeout=30
         )
