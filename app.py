@@ -266,7 +266,7 @@ def produtos():
             item_id = None
             link = None
 
-              if product_id:
+            if product_id:
                 product_response = requests.get(
                     f"https://api.mercadolibre.com/products/{product_id}",
                     headers={
