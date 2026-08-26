@@ -225,27 +225,6 @@ def callback():
     """
 
 
-@app.route("/status")
-def status():
-    try:
-        token = get_access_token()
-
-        if not token:
-            return jsonify({
-                "autorizado": False,
-                "mensagem": "Ainda é necessário autorizar o Mercado Livre."
-            })
-
-        return jsonify({
-            "autorizado": True,
-            "mensagem": "Token encontrado e válido."
-        })
-
-    except Exception as e:
-        return jsonify({
-            "autorizado": False,
-            "erro": str(e)
-        }), 500
 @app.route("/produtos")
 def produtos():
     try:
@@ -260,29 +239,30 @@ def produtos():
 
         response = requests.get(
             "https://api.mercadolibre.com/products/search",
-             headers={
-                 "Authorization": f"Bearer {token}"
-             },
-             params={
-                 "site_id": "MLB",
-                 "status": "active",
-                 "q": termo
-             },
-             timeout=30
-         )
-         if not response.ok:
-             return jsonify({
-                 "erro": "Erro ao buscar produtos.",
-                 "status": response.status_code,
-                 "resposta": response.text
-             }), response.status_code
+            headers={
+                "Authorization": f"Bearer {token}"
+            },
+            params={
+                "site_id": "MLB",
+                "status": "active",
+                "q": termo
+            },
+            timeout=30
+        )
+
+        if not response.ok:
+            return jsonify({
+                "erro": "Erro ao buscar produtos.",
+                "status": response.status_code,
+                "resposta": response.text
+            }), response.status_code
 
         data = response.json()
 
         produtos_encontrados = []
 
         for produto in data.get("results", [])[:10]:
-               produtos_encontrados.append({
+            produtos_encontrados.append({
                 "id": produto.get("id"),
                 "nome": produto.get("name"),
                 "status": produto.get("status"),
