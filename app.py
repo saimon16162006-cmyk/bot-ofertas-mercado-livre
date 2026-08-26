@@ -300,7 +300,10 @@ def produtos():
             "quantidade": len(produtos_encontrados),
             "produtos": produtos_encontrados
         })
-
+    except Exception as e:
+        return jsonify({
+            "erro": str(e)
+        }), 500
 @app.route("/debug-produto")
 def debug_produto():
     try:
