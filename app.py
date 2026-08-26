@@ -218,7 +218,7 @@ def status():
             "erro": str(e)
         }), 500
 
-
+create_table()
 if __name__ == "__main__":
     create_table()
 
