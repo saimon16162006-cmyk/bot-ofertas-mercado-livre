@@ -301,11 +301,36 @@ def produtos():
             "produtos": produtos_encontrados
         })
 
+@app.route("/debug-produto")
+def debug_produto():
+    try:
+        token = get_access_token()
+
+        if not token:
+            return jsonify({
+                "erro": "Mercado Livre ainda não autorizado."
+            }), 401
+
+        product_id = request.args.get("id", "MLB6055020")
+
+        response = requests.get(
+            f"https://api.mercadolibre.com/products/{product_id}",
+            headers={
+                "Authorization": f"Bearer {token}"
+            },
+            timeout=30
+        )
+
+        return jsonify({
+            "product_id": product_id,
+            "status": response.status_code,
+            "resposta": response.json() if response.ok else response.text
+        })
+
     except Exception as e:
         return jsonify({
             "erro": str(e)
         }), 500
-create_table()
 @app.route("/adicionar-link", methods=["GET", "POST"])
 def adicionar_link():
     if request.method == "GET":
