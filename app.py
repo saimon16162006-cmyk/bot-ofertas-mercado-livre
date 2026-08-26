@@ -265,6 +265,7 @@ def produtos():
             product_id = produto.get("id")
             item_id = None
             link = None
+            preco = None
 
             if product_id:
                 product_response = requests.get(
@@ -278,15 +279,12 @@ def produtos():
                 if product_response.ok:
                     product_data = product_response.json()
 
+                    link = product_data.get("permalink")
                     winner = product_data.get("buy_box_winner")
 
                     if winner:
                         item_id = winner.get("item_id")
-
-                    if item_id:
-                        link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
-                    else:
-                        link = product_data.get("permalink")
+                        preco = winner.get("price")
 
             produtos_encontrados.append({
                 "id": product_id,
@@ -294,6 +292,7 @@ def produtos():
                 "nome": produto.get("name"),
                 "status": produto.get("status"),
                 "dominio": produto.get("domain_id"),
+                "preco": preco,
                 "link": link
             })
         return jsonify({
