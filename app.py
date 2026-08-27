@@ -161,9 +161,12 @@ def me():
 @app.route("/")
 def home():
     return """
-    <h2>Bot de Ofertas Mercado Livre ONLINE!</h2>
-    <p><a href="/login">Clique aqui para autorizar o Mercado Livre</a></p>
+    <h2>Bot de Ofertas Mercado Livre ONLINE! ✅</h2>
+    <p><a href="/login">Autorizar o Mercado Livre</a></p>
     <p><a href="/status">Ver status da autorização</a></p>
+    <p><a href="/produtos?q=iphone">Testar busca de produtos</a></p>
+    <p><a href="/oferta?q=iphone">Testar melhor oferta</a></p>
+    <p><a href="/rotas">Ver rotas disponíveis</a></p>
     """
 
 
@@ -223,6 +226,66 @@ def callback():
     <p>Access Token e Refresh Token foram salvos no banco Neon.</p>
     <p><a href="/status">Verificar status</a></p>
     """
+
+
+@app.route("/status")
+def status():
+    """Verifica se a autorização do Mercado Livre está válida sem expor os tokens."""
+    try:
+        tokens = load_tokens()
+
+        if not tokens:
+            return """
+            <h2>Mercado Livre ainda não autorizado. ❌</h2>
+            <p><a href="/login">Autorizar agora</a></p>
+            <p><a href="/">Voltar para o início</a></p>
+            """, 401
+
+        token = get_access_token()
+
+        if not token:
+            return """
+            <h2>Não foi possível obter um Access Token válido. ❌</h2>
+            <p><a href="/login">Autorizar novamente</a></p>
+            <p><a href="/">Voltar para o início</a></p>
+            """, 401
+
+        response = requests.get(
+            "https://api.mercadolibre.com/users/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30
+        )
+
+        if not response.ok:
+            return f"""
+            <h2>Autorização encontrada, mas o Mercado Livre recusou o token. ⚠️</h2>
+            <p>Status da API: {response.status_code}</p>
+            <p><a href="/login">Autorizar novamente</a></p>
+            <p><a href="/">Voltar para o início</a></p>
+            """, response.status_code
+
+        user_data = response.json()
+        nickname = user_data.get("nickname") or user_data.get("first_name") or "Conta Mercado Livre"
+        user_id = user_data.get("id", "-")
+
+        return f"""
+        <h2>Mercado Livre conectado com sucesso! ✅</h2>
+        <p><strong>Conta:</strong> {nickname}</p>
+        <p><strong>ID:</strong> {user_id}</p>
+        <p>Access Token válido e Refresh Token salvo no banco Neon.</p>
+
+        <h3>Testes</h3>
+        <p><a href="/produtos?q=iphone">Testar busca de produtos</a></p>
+        <p><a href="/oferta?q=iphone">Testar melhor oferta</a></p>
+        <p><a href="/rotas">Ver rotas do bot</a></p>
+        <p><a href="/">Voltar para o início</a></p>
+        """
+
+    except Exception as e:
+        return jsonify({
+            "erro": "Falha ao verificar o status da autorização.",
+            "detalhes": str(e)
+        }), 500
 
 
 @app.route("/produtos")
