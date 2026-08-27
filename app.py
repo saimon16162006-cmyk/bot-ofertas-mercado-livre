@@ -232,7 +232,7 @@ def produtos():
 
         if not token:
             return jsonify({
-                "error": "Mercado Livre ainda não autorizado."
+                "erro": "Mercado Livre ainda não autorizado."
             }), 401
 
         termo = request.args.get("q", "iphone")
@@ -261,7 +261,7 @@ def produtos():
         data = response.json()
         produtos_encontrados = []
 
-        for produto in data.get("results", [])[:50]:
+        for produto in data.get("results", []):
             product_id = produto.get("id")
 
             if not product_id:
@@ -279,28 +279,58 @@ def produtos():
                 continue
 
             product_data = product_response.json()
-            winner = product_data.get("buy_box_winner")
 
-            if not winner:
-                continue
+            item_id = None
+            preco = None
+            link = None
 
-            item_id = winner.get("item_id")
-            preco = winner.get("price")
+            buy_box = product_data.get("buy_box_winner")
 
-            if not item_id or preco is None:
-                continue
+            if buy_box:
+                item_id = buy_box.get("item_id")
+                preco = buy_box.get("price")
 
-            link = (
-                "https://produto.mercadolivre.com.br/"
-                f"MLB-{item_id.replace('MLB', '')}"
-            )
+            if not item_id:
+                item_id = product_data.get("item_id")
+
+            if not item_id:
+                item_id = produto.get("item_id")
+
+            if item_id:
+                item_response = requests.get(
+                    f"https://api.mercadolibre.com/items/{item_id}",
+                    headers={
+                        "Authorization": f"Bearer {token}"
+                    },
+                    timeout=30
+                )
+
+                if item_response.ok:
+                    item_data = item_response.json()
+
+                    if preco is None:
+                        preco = item_data.get("price")
+
+                    link = item_data.get("permalink")
+
+            if preco is None:
+                preco = product_data.get("price")
+
+            if not link:
+                link = product_data.get("permalink")
+
+            if not link:
+                link = produto.get("permalink")
+
+            if not link:
+                link = f"https://www.mercadolivre.com.br/p/{product_id}"
 
             produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
-                "nome": produto.get("name"),
-                "status": produto.get("status"),
-                "dominio": produto.get("domain_id"),
+                "nome": produto.get("name") or product_data.get("name"),
+                "status": produto.get("status") or product_data.get("status"),
+                "dominio": produto.get("domain_id") or product_data.get("domain_id"),
                 "preco": preco,
                 "link": link
             })
@@ -316,7 +346,7 @@ def produtos():
 
     except Exception as e:
         return jsonify({
-            "error": str(e)
+            "erro": str(e)
         }), 500
 @app.route("/debug-produto")
 def debug_produto():
