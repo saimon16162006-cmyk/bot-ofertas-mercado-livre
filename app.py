@@ -232,7 +232,7 @@ def produtos():
 
         if not token:
             return jsonify({
-                "erro": "Mercado Livre ainda não autorizado."
+                "error": "Mercado Livre ainda não autorizado."
             }), 401
 
         termo = request.args.get("q", "iphone")
@@ -242,12 +242,12 @@ def produtos():
             headers={
                 "Authorization": f"Bearer {token}"
             },
-params={
-    "site_id": "MLB",
-    "status": "active",
-    "q": termo,
-    "limit": 50
-},
+            params={
+                "site_id": "MLB",
+                "status": "active",
+                "q": termo,
+                "limit": 50
+            },
             timeout=30
         )
 
@@ -259,39 +259,43 @@ params={
             }), response.status_code
 
         data = response.json()
-
         produtos_encontrados = []
 
         for produto in data.get("results", [])[:50]:
             product_id = produto.get("id")
-            item_id = None
-            link = None
-            preco = None
 
-            if product_id:
-                product_response = requests.get(
-                    f"https://api.mercadolibre.com/products/{product_id}",
-                    headers={
-                        "Authorization": f"Bearer {token}"
-                    },
-                    timeout=30
-                )
+            if not product_id:
+                continue
 
-                if product_response.ok:
-                    product_data = product_response.json()
+            product_response = requests.get(
+                f"https://api.mercadolibre.com/products/{product_id}",
+                headers={
+                    "Authorization": f"Bearer {token}"
+                },
+                timeout=30
+            )
 
-                link = f"https://www.mercadolivre.com.br/p/{product_id}"
-                winner = product_data.get("buy_box_winner")
+            if not product_response.ok:
+                continue
 
-                if winner:
-                    item_id = winner.get("item_id")
-                    preco = winner.get("price")
+            product_data = product_response.json()
+            winner = product_data.get("buy_box_winner")
 
-                    if item_id:
-                        link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
-        if not item_id or preco is None:
-            continue
-        produtos_encontrados.append({
+            if not winner:
+                continue
+
+            item_id = winner.get("item_id")
+            preco = winner.get("price")
+
+            if not item_id or preco is None:
+                continue
+
+            link = (
+                "https://produto.mercadolivre.com.br/"
+                f"MLB-{item_id.replace('MLB', '')}"
+            )
+
+            produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
                 "nome": produto.get("name"),
@@ -300,16 +304,19 @@ params={
                 "preco": preco,
                 "link": link
             })
-        if len(produtos_encontrados) >= 10:
-            break
+
+            if len(produtos_encontrados) >= 10:
+                break
+
         return jsonify({
             "busca": termo,
             "quantidade": len(produtos_encontrados),
             "produtos": produtos_encontrados
         })
+
     except Exception as e:
         return jsonify({
-            "erro": str(e)
+            "error": str(e)
         }), 500
 @app.route("/debug-produto")
 def debug_produto():
