@@ -443,7 +443,7 @@ def adicionar_link():
         cur = conn.cursor()
 
         cur.execute("""
-            INSERT INTO affiliate_links (
+            INSERT INTO ml_affiliate_product_links (
                 product_url,
                 affiliate_url,
                 product_name
@@ -477,7 +477,7 @@ def links():
 
         cur.execute("""
             SELECT id, product_url, affiliate_url, product_name, created_at
-            FROM affiliate_links
+            FROM ml_affiliate_product_links
             ORDER BY id ASC
         """)
 
@@ -594,11 +594,11 @@ def rotas():
 
 
 
-def ensure_affiliate_links_table():
+def ensure_ml_affiliate_product_links_table():
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS affiliate_links (
+        CREATE TABLE IF NOT EXISTS ml_affiliate_product_links (
             item_id TEXT PRIMARY KEY,
             product_name TEXT,
             original_url TEXT NOT NULL,
@@ -616,13 +616,13 @@ def get_affiliate_link(item_id):
     if not item_id:
         return None
 
-    ensure_affiliate_links_table()
+    ensure_ml_affiliate_product_links_table()
 
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         SELECT affiliate_url
-        FROM affiliate_links
+        FROM ml_affiliate_product_links
         WHERE item_id = %s
         LIMIT 1
     """, (item_id,))
@@ -635,7 +635,7 @@ def get_affiliate_link(item_id):
 
 @app.route("/afiliado", methods=["GET", "POST"])
 def afiliado():
-    ensure_affiliate_links_table()
+    ensure_ml_affiliate_product_links_table()
 
     if request.method == "GET":
         item_id = request.args.get("item_id", "")
@@ -709,7 +709,7 @@ def afiliado():
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO affiliate_links (
+        INSERT INTO ml_affiliate_product_links (
             item_id, product_name, original_url, affiliate_url, created_at, updated_at
         )
         VALUES (%s, %s, %s, %s, NOW(), NOW())
