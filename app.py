@@ -242,11 +242,12 @@ def produtos():
             headers={
                 "Authorization": f"Bearer {token}"
             },
-            params={
-                "site_id": "MLB",
-                "status": "active",
-                "q": termo
-            },
+params={
+    "site_id": "MLB",
+    "status": "active",
+    "q": termo,
+    "limit": 50
+},
             timeout=30
         )
 
@@ -261,7 +262,7 @@ def produtos():
 
         produtos_encontrados = []
 
-        for produto in data.get("results", [])[:10]:
+ for produto in data.get("results", [])[:50]:
             product_id = produto.get("id")
             item_id = None
             link = None
@@ -288,6 +289,8 @@ def produtos():
 
                     if item_id:
                         link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
+        if not item_id or preco is None:
+            continue
                 produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
@@ -297,7 +300,9 @@ def produtos():
                 "preco": preco,
                 "link": link
             })
-        return jsonify({
+        if len(produtos_encontrados) >= 10:
+            break
+return jsonify({
             "busca": termo,
             "quantidade": len(produtos_encontrados),
             "produtos": produtos_encontrados
