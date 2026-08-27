@@ -1,6 +1,5 @@
 import os
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 import psycopg2
 import requests
@@ -167,8 +166,6 @@ def home():
     <p><a href="/status">Ver status da autorização</a></p>
     <p><a href="/produtos?q=iphone">Testar busca de produtos</a></p>
     <p><a href="/oferta?q=iphone">Testar melhor oferta</a></p>
-    <p><a href="/configurar-afiliado">Configurar afiliado</a></p>
-    <p><a href="/oferta-afiliada?q=iphone">Testar oferta afiliada</a></p>
     <p><a href="/rotas">Ver rotas disponíveis</a></p>
     """
 
@@ -280,8 +277,6 @@ def status():
         <h3>Testes</h3>
         <p><a href="/produtos?q=iphone">Testar busca de produtos</a></p>
         <p><a href="/oferta?q=iphone">Testar melhor oferta</a></p>
-        <p><a href="/configurar-afiliado">Configurar afiliado</a></p>
-        <p><a href="/oferta-afiliada?q=iphone">Testar oferta afiliada</a></p>
         <p><a href="/rotas">Ver rotas do bot</a></p>
         <p><a href="/">Voltar para o início</a></p>
         """
@@ -662,222 +657,6 @@ def rotas():
 
 
 
-
-def ensure_affiliate_tracking_table():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS ml_affiliate_tracking (
-            id INTEGER PRIMARY KEY,
-            tracking_params TEXT NOT NULL,
-            example_url TEXT,
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-        )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
-def extract_affiliate_tracking_params(affiliate_url):
-    """
-    Extrai parâmetros de rastreamento de um link OFICIAL de afiliado.
-    Mantemos somente parâmetros conhecidos de tracking para não copiar lixo
-    de navegação para os próximos produtos.
-    """
-    parsed = urlparse(affiliate_url.strip())
-    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
-
-    allowed = {
-        "matt_tool",
-        "matt_word",
-        "matt_source",
-        "matt_campaign",
-        "matt_ad_group",
-        "matt_match_type",
-        "matt_network",
-        "matt_device",
-        "matt_creative",
-        "matt_keyword",
-        "matt_ad_position",
-        "matt_ad_type",
-        "matt_merchant_id",
-        "matt_product_id",
-        "matt_product_partition_id",
-        "matt_target_id",
-        "matt_adid",
-        "matt_product_country",
-        "matt_product_language",
-        "tag",
-    }
-
-    clean = {k: v for k, v in params.items() if k in allowed and v}
-
-    # Os links mais comuns do programa usam matt_tool/matt_word.
-    if not clean:
-        raise ValueError(
-            "Não encontrei parâmetros de afiliado no link. "
-            "Gere um link pelo Portal/Barra de Afiliados do Mercado Livre e cole aqui."
-        )
-
-    return clean
-
-
-def save_affiliate_tracking(example_url, params):
-    ensure_affiliate_tracking_table()
-
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO ml_affiliate_tracking (id, tracking_params, example_url, updated_at)
-        VALUES (1, %s, %s, NOW())
-        ON CONFLICT (id)
-        DO UPDATE SET
-            tracking_params = EXCLUDED.tracking_params,
-            example_url = EXCLUDED.example_url,
-            updated_at = NOW()
-    """, (urlencode(params), example_url))
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
-def load_affiliate_tracking():
-    ensure_affiliate_tracking_table()
-
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT tracking_params, example_url
-        FROM ml_affiliate_tracking
-        WHERE id = 1
-        LIMIT 1
-    """)
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-
-    if not row:
-        return None, None
-
-    return dict(parse_qsl(row[0], keep_blank_values=True)), row[1]
-
-
-def build_affiliate_url(product_url):
-    """
-    Reaplica os parâmetros de tracking salvos a um link normal de produto.
-    Isso elimina o cadastro manual produto por produto.
-    """
-    params, _ = load_affiliate_tracking()
-    if not params:
-        return None
-
-    parsed = urlparse(product_url)
-    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    query.update(params)
-
-    return urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        urlencode(query),
-        parsed.fragment,
-    ))
-
-
-@app.route("/configurar-afiliado", methods=["GET", "POST"])
-def configurar_afiliado():
-    if request.method == "GET":
-        params, example_url = load_affiliate_tracking()
-
-        status_html = ""
-        if params:
-            status_html = (
-                "<p style='color:green'><strong>Configuração salva ✅</strong></p>"
-                f"<p>Parâmetros encontrados: {', '.join(sorted(params.keys()))}</p>"
-            )
-
-        return f"""
-        <!doctype html>
-        <html lang="pt-BR">
-        <head>
-            <meta charset="utf-8">
-            <title>Configurar afiliado</title>
-            <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    max-width: 760px;
-                    margin: 40px auto;
-                    padding: 0 16px;
-                    line-height: 1.5;
-                }}
-                input {{
-                    width: 100%;
-                    padding: 11px;
-                    box-sizing: border-box;
-                    margin: 8px 0 16px;
-                }}
-                button {{
-                    padding: 12px 18px;
-                    cursor: pointer;
-                }}
-                .box {{
-                    border: 1px solid #ddd;
-                    border-radius: 10px;
-                    padding: 18px;
-                }}
-            </style>
-        </head>
-        <body>
-            <h2>Configurar link de afiliado</h2>
-            {status_html}
-            <div class="box">
-                <p>
-                    Gere <strong>uma única vez</strong> um link de afiliado oficial
-                    no Portal/Barra de Afiliados do Mercado Livre e cole abaixo.
-                    O bot salvará apenas os parâmetros de rastreamento para reutilizar
-                    nas próximas ofertas.
-                </p>
-                <form method="POST">
-                    <label>Link oficial de afiliado:</label>
-                    <input
-                        type="url"
-                        name="affiliate_url"
-                        placeholder="https://produto.mercadolivre.com.br/..."
-                        value="{example_url or ''}"
-                        required
-                    >
-                    <button type="submit">Salvar configuração</button>
-                </form>
-            </div>
-            <p><a href="/">Voltar para o início</a></p>
-        </body>
-        </html>
-        """
-
-    affiliate_url = request.form.get("affiliate_url", "").strip()
-
-    try:
-        params = extract_affiliate_tracking_params(affiliate_url)
-        save_affiliate_tracking(affiliate_url, params)
-
-        return f"""
-        <h2>Afiliado configurado com sucesso! ✅</h2>
-        <p>O bot encontrou e salvou: <strong>{', '.join(sorted(params.keys()))}</strong></p>
-        <p>Agora não é mais necessário cadastrar link produto por produto.</p>
-        <p><a href="/oferta-afiliada?q=iphone">Testar oferta afiliada</a></p>
-        <p><a href="/">Voltar ao início</a></p>
-        """
-    except Exception as e:
-        return f"""
-        <h2>Não consegui reconhecer esse link. ❌</h2>
-        <p>{str(e)}</p>
-        <p>Gere o link pelo Portal/Barra de Afiliados e tente novamente.</p>
-        <p><a href="/configurar-afiliado">Voltar</a></p>
-        """, 400
-
-
 def ensure_ml_affiliate_product_links_table():
     conn = get_connection()
     cur = conn.cursor()
@@ -1018,7 +797,7 @@ def afiliado():
 @app.route("/oferta-afiliada")
 def oferta_afiliada():
     try:
-        termo = request.args.get("q", "iphone").strip()
+        termo = request.args.get("q", "iphone")
 
         with app.test_request_context(f"/produtos?q={termo}"):
             resposta = produtos()
@@ -1045,19 +824,8 @@ def oferta_afiliada():
             }), 404
 
         melhor = min(validos, key=lambda p: float(p["preco"]))
-        affiliate_url = build_affiliate_url(melhor.get("link"))
-
-        if not affiliate_url:
-            return jsonify({
-                "status": "configuracao_afiliado_necessaria",
-                "busca": termo,
-                "produto": melhor,
-                "configurar": "/configurar-afiliado",
-                "instrucao": (
-                    "Gere apenas UM link oficial no Portal/Barra de Afiliados, "
-                    "cole em /configurar-afiliado e depois teste esta rota novamente."
-                )
-            }), 409
+        item_id = melhor.get("item_id")
+        affiliate_url = get_affiliate_link(item_id)
 
         preco_num = float(melhor["preco"])
         preco_formatado = (
@@ -1066,6 +834,21 @@ def oferta_afiliada():
             .replace(".", ",")
             .replace("X", ".")
         )
+
+        if not affiliate_url:
+            cadastro_url = (
+                f"/afiliado?item_id={item_id}"
+                f"&nome={melhor.get('nome','')}"
+                f"&link={melhor.get('link','')}"
+            )
+
+            return jsonify({
+                "status": "aguardando_link_afiliado",
+                "busca": termo,
+                "produto": melhor,
+                "cadastro_link": cadastro_url,
+                "instrucao": "Gere o link no Mercado Livre e salve nesta rota."
+            }), 409
 
         mensagem = (
             "🔥 OFERTA ENCONTRADA!\n\n"
@@ -1079,7 +862,7 @@ def oferta_afiliada():
             "busca": termo,
             "produto": {
                 "id": melhor.get("id"),
-                "item_id": melhor.get("item_id"),
+                "item_id": item_id,
                 "nome": melhor.get("nome"),
                 "preco": melhor.get("preco"),
                 "preco_formatado": preco_formatado,
@@ -1095,7 +878,6 @@ def oferta_afiliada():
         return jsonify({
             "erro": str(e)
         }), 500
-
 
 if __name__ == "__main__":
     create_table()
