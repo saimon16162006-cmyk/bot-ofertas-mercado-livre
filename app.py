@@ -302,7 +302,7 @@ params={
             })
         if len(produtos_encontrados) >= 10:
             break
-return jsonify({
+        return jsonify({
             "busca": termo,
             "quantidade": len(produtos_encontrados),
             "produtos": produtos_encontrados
