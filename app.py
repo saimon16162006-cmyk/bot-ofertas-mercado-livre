@@ -237,21 +237,43 @@ def produtos():
 
         termo = request.args.get("q", "iphone").strip()
         if not termo:
-            termo = "iphone"
+            return jsonify({"erro": "Informe um termo de busca."}), 400
 
-        headers = {
-            "Authorization": f"Bearer {token}"
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1) Descobre primeiro o domínio correto do termo.
+        # Ex.: "iphone" -> MLB-CELLPHONES. Isso evita capas e acessórios.
+        domain_response = requests.get(
+            "https://api.mercadolibre.com/sites/MLB/domain_discovery/search",
+            headers=headers,
+            params={"q": termo, "limit": 1},
+            timeout=30
+        )
+
+        domain_id = None
+        if domain_response.ok:
+            domain_results = domain_response.json()
+            if isinstance(domain_results, list) and domain_results:
+                domain_id = domain_results[0].get("domain_id")
+
+        # Fallback especial para iPhone caso o preditor não retorne domínio.
+        if not domain_id and "iphone" in termo.lower():
+            domain_id = "MLB-CELLPHONES"
+
+        # 2) Busca somente produtos do domínio identificado.
+        params = {
+            "site_id": "MLB",
+            "status": "active",
+            "q": termo,
+            "limit": 50
         }
+        if domain_id:
+            params["domain_id"] = domain_id
 
         response = requests.get(
             "https://api.mercadolibre.com/products/search",
             headers=headers,
-            params={
-                "site_id": "MLB",
-                "status": "active",
-                "q": termo,
-                "limit": 50
-            },
+            params=params,
             timeout=30
         )
 
@@ -264,41 +286,60 @@ def produtos():
 
         data = response.json()
         produtos_encontrados = []
+        vistos = set()
 
         for produto in data.get("results", []):
+            if len(produtos_encontrados) >= 10:
+                break
+
             product_id = produto.get("id")
-            if not product_id:
+            result_domain = produto.get("domain_id")
+
+            if not product_id or product_id in vistos:
                 continue
 
-            # O endpoint /products/search retorna produtos de catálogo.
-            # Para obter um anúncio real com item_id e preço, consultamos
-            # as publicações que competem nesse produto de catálogo.
+            # Segurança extra: se descobrimos um domínio, não aceitamos outro.
+            if domain_id and result_domain != domain_id:
+                continue
+
+            vistos.add(product_id)
+
+            # 3) Obtém os anúncios reais que competem nessa página de produto.
             items_response = requests.get(
                 f"https://api.mercadolibre.com/products/{product_id}/items",
                 headers=headers,
+                params={"limit": 100},
                 timeout=30
             )
 
             if not items_response.ok:
                 continue
 
-            items_data = items_response.json()
+            items = items_response.json().get("results", [])
+            if not items:
+                continue
+
+            # Dá preferência a anúncio novo e escolhe o menor preço válido.
             candidatos = [
-                item for item in items_data.get("results", [])
-                if item.get("item_id") and item.get("price") is not None
+                item for item in items
+                if item.get("item_id")
+                and item.get("price") is not None
+                and item.get("condition", "new") == "new"
             ]
+
+            if not candidatos:
+                candidatos = [
+                    item for item in items
+                    if item.get("item_id") and item.get("price") is not None
+                ]
 
             if not candidatos:
                 continue
 
-            # Para um bot de ofertas, prioriza a publicação de menor preço
-            # entre as publicações disponíveis para aquele produto de catálogo.
-            oferta = min(candidatos, key=lambda item: item["price"])
-            item_id = oferta["item_id"]
-            preco = oferta["price"]
-            link = None
-            titulo = produto.get("name")
-            thumbnail = None
+            oferta = min(candidatos, key=lambda item: float(item.get("price")))
+            item_id = oferta.get("item_id")
+            preco = oferta.get("price")
+            moeda = oferta.get("currency_id")
 
             item_response = requests.get(
                 f"https://api.mercadolibre.com/items/{item_id}",
@@ -306,41 +347,36 @@ def produtos():
                 timeout=30
             )
 
-            if item_response.ok:
-                item_data = item_response.json()
-                preco = item_data.get("price", preco)
-                link = item_data.get("permalink")
-                titulo = item_data.get("title") or titulo
-                thumbnail = item_data.get("thumbnail")
+            item_data = item_response.json() if item_response.ok else {}
+            link = item_data.get("permalink")
+            imagem = item_data.get("thumbnail")
 
             if not link:
                 link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
 
+            if not imagem:
+                pictures = produto.get("pictures") or []
+                if pictures:
+                    imagem = pictures[0].get("url") or pictures[0].get("secure_url")
+
             produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
-                "nome": titulo,
+                "nome": produto.get("name"),
                 "status": produto.get("status"),
-                "dominio": produto.get("domain_id"),
+                "dominio": result_domain,
                 "preco": preco,
-                "link": link,
-                "imagem": thumbnail
+                "moeda": moeda,
+                "imagem": imagem,
+                "link": link
             })
-
-            if len(produtos_encontrados) >= 10:
-                break
 
         return jsonify({
             "busca": termo,
+            "dominio": domain_id,
             "quantidade": len(produtos_encontrados),
             "produtos": produtos_encontrados
         })
-
-    except requests.RequestException as e:
-        return jsonify({
-            "erro": "Falha de comunicação com o Mercado Livre.",
-            "detalhe": str(e)
-        }), 502
 
     except Exception as e:
         return jsonify({
