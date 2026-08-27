@@ -235,13 +235,17 @@ def produtos():
                 "erro": "Mercado Livre ainda não autorizado."
             }), 401
 
-        termo = request.args.get("q", "iphone")
+        termo = request.args.get("q", "iphone").strip()
+        if not termo:
+            termo = "iphone"
+
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
 
         response = requests.get(
             "https://api.mercadolibre.com/products/search",
-            headers={
-                "Authorization": f"Bearer {token}"
-            },
+            headers=headers,
             params={
                 "site_id": "MLB",
                 "status": "active",
@@ -263,76 +267,64 @@ def produtos():
 
         for produto in data.get("results", []):
             product_id = produto.get("id")
-
             if not product_id:
                 continue
 
-            product_response = requests.get(
-                f"https://api.mercadolibre.com/products/{product_id}",
-                headers={
-                    "Authorization": f"Bearer {token}"
-                },
+            # O endpoint /products/search retorna produtos de catálogo.
+            # Para obter um anúncio real com item_id e preço, consultamos
+            # as publicações que competem nesse produto de catálogo.
+            items_response = requests.get(
+                f"https://api.mercadolibre.com/products/{product_id}/items",
+                headers=headers,
                 timeout=30
             )
 
-            if not product_response.ok:
+            if not items_response.ok:
                 continue
 
-            product_data = product_response.json()
+            items_data = items_response.json()
+            candidatos = [
+                item for item in items_data.get("results", [])
+                if item.get("item_id") and item.get("price") is not None
+            ]
 
-            item_id = None
-            preco = None
+            if not candidatos:
+                continue
+
+            # Para um bot de ofertas, prioriza a publicação de menor preço
+            # entre as publicações disponíveis para aquele produto de catálogo.
+            oferta = min(candidatos, key=lambda item: item["price"])
+            item_id = oferta["item_id"]
+            preco = oferta["price"]
             link = None
+            titulo = produto.get("name")
+            thumbnail = None
 
-            buy_box = product_data.get("buy_box_winner")
+            item_response = requests.get(
+                f"https://api.mercadolibre.com/items/{item_id}",
+                headers=headers,
+                timeout=30
+            )
 
-            if buy_box:
-                item_id = buy_box.get("item_id")
-                preco = buy_box.get("price")
-
-            if not item_id:
-                item_id = product_data.get("item_id")
-
-            if not item_id:
-                item_id = produto.get("item_id")
-
-            if item_id:
-                item_response = requests.get(
-                    f"https://api.mercadolibre.com/items/{item_id}",
-                    headers={
-                        "Authorization": f"Bearer {token}"
-                    },
-                    timeout=30
-                )
-
-                if item_response.ok:
-                    item_data = item_response.json()
-
-                    if preco is None:
-                        preco = item_data.get("price")
-
-                    link = item_data.get("permalink")
-
-            if preco is None:
-                preco = product_data.get("price")
+            if item_response.ok:
+                item_data = item_response.json()
+                preco = item_data.get("price", preco)
+                link = item_data.get("permalink")
+                titulo = item_data.get("title") or titulo
+                thumbnail = item_data.get("thumbnail")
 
             if not link:
-                link = product_data.get("permalink")
-
-            if not link:
-                link = produto.get("permalink")
-
-            if not link:
-                link = f"https://www.mercadolivre.com.br/p/{product_id}"
+                link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
 
             produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
-                "nome": produto.get("name") or product_data.get("name"),
-                "status": produto.get("status") or product_data.get("status"),
-                "dominio": produto.get("domain_id") or product_data.get("domain_id"),
+                "nome": titulo,
+                "status": produto.get("status"),
+                "dominio": produto.get("domain_id"),
                 "preco": preco,
-                "link": link
+                "link": link,
+                "imagem": thumbnail
             })
 
             if len(produtos_encontrados) >= 10:
@@ -344,10 +336,18 @@ def produtos():
             "produtos": produtos_encontrados
         })
 
+    except requests.RequestException as e:
+        return jsonify({
+            "erro": "Falha de comunicação com o Mercado Livre.",
+            "detalhe": str(e)
+        }), 502
+
     except Exception as e:
         return jsonify({
             "erro": str(e)
         }), 500
+
+
 @app.route("/debug-produto")
 def debug_produto():
     try:
