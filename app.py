@@ -291,7 +291,7 @@ params={
                         link = f"https://produto.mercadolivre.com.br/MLB-{item_id.replace('MLB', '')}"
         if not item_id or preco is None:
             continue
-                produtos_encontrados.append({
+        produtos_encontrados.append({
                 "id": product_id,
                 "item_id": item_id,
                 "nome": produto.get("name"),
