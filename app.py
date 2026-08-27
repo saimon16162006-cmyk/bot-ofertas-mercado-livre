@@ -507,6 +507,92 @@ def links():
             "erro": str(e)
         }), 500
     
+
+@app.route("/oferta")
+def oferta():
+    try:
+        termo = request.args.get("q", "iphone")
+
+        with app.test_request_context(f"/produtos?q={termo}"):
+            resposta = produtos()
+
+        if isinstance(resposta, tuple):
+            response_obj, status_code = resposta[0], resposta[1]
+            if status_code >= 400:
+                return resposta
+        else:
+            response_obj = resposta
+
+        data = response_obj.get_json()
+        produtos_lista = data.get("produtos", [])
+
+        if not produtos_lista:
+            return jsonify({
+                "erro": "Nenhuma oferta encontrada.",
+                "busca": termo
+            }), 404
+
+        validos = [
+            p for p in produtos_lista
+            if p.get("preco") is not None and p.get("link")
+        ]
+
+        if not validos:
+            return jsonify({
+                "erro": "Nenhuma oferta válida com preço e link encontrada.",
+                "busca": termo
+            }), 404
+
+        melhor = min(validos, key=lambda p: float(p["preco"]))
+
+        preco_num = float(melhor["preco"])
+        preco_formatado = (
+            f"R$ {preco_num:,.2f}"
+            .replace(",", "X")
+            .replace(".", ",")
+            .replace("X", ".")
+        )
+
+        mensagem = (
+            "🔥 OFERTA ENCONTRADA!\n\n"
+            f"📦 {melhor.get('nome', 'Produto')}\n"
+            f"💰 {preco_formatado}\n"
+            f"🛒 Comprar: {melhor.get('link')}\n\n"
+            "⚠️ Preço e disponibilidade podem mudar a qualquer momento."
+        )
+
+        return jsonify({
+            "busca": termo,
+            "produto": {
+                "id": melhor.get("id"),
+                "item_id": melhor.get("item_id"),
+                "nome": melhor.get("nome"),
+                "preco": melhor.get("preco"),
+                "preco_formatado": preco_formatado,
+                "imagem": melhor.get("imagem"),
+                "link": melhor.get("link"),
+                "status": melhor.get("status")
+            },
+            "mensagem": mensagem
+        })
+
+    except Exception as e:
+        return jsonify({
+            "erro": str(e)
+        }), 500
+
+
+@app.route("/rotas")
+def rotas():
+    return jsonify({
+        "rotas": sorted(
+            rule.rule
+            for rule in app.url_map.iter_rules()
+            if rule.endpoint != "static"
+        )
+    })
+
+
 if __name__ == "__main__":
     create_table()
     port = int(os.environ.get("PORT", 10000))
