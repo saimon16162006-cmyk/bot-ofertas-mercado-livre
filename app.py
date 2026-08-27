@@ -593,6 +593,229 @@ def rotas():
     })
 
 
+
+def ensure_affiliate_links_table():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS affiliate_links (
+            item_id TEXT PRIMARY KEY,
+            product_name TEXT,
+            original_url TEXT NOT NULL,
+            affiliate_url TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_affiliate_link(item_id):
+    if not item_id:
+        return None
+
+    ensure_affiliate_links_table()
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT affiliate_url
+        FROM affiliate_links
+        WHERE item_id = %s
+        LIMIT 1
+    """, (item_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    return row[0] if row else None
+
+
+@app.route("/afiliado", methods=["GET", "POST"])
+def afiliado():
+    ensure_affiliate_links_table()
+
+    if request.method == "GET":
+        item_id = request.args.get("item_id", "")
+        nome = request.args.get("nome", "")
+        link = request.args.get("link", "")
+
+        return f"""
+        <!doctype html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="utf-8">
+            <title>Cadastrar link de afiliado</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    max-width: 760px;
+                    margin: 40px auto;
+                    padding: 0 16px;
+                    line-height: 1.5;
+                }}
+                input {{
+                    width: 100%;
+                    padding: 10px;
+                    margin: 6px 0 16px;
+                    box-sizing: border-box;
+                }}
+                button {{
+                    padding: 12px 18px;
+                    cursor: pointer;
+                }}
+                .box {{
+                    padding: 16px;
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
+                }}
+            </style>
+        </head>
+        <body>
+            <h2>Cadastrar link de afiliado</h2>
+            <div class="box">
+                <form method="POST">
+                    <label>Item ID</label>
+                    <input name="item_id" value="{item_id}" required>
+
+                    <label>Nome do produto</label>
+                    <input name="product_name" value="{nome}">
+
+                    <label>Link normal do Mercado Livre</label>
+                    <input name="original_url" value="{link}" required>
+
+                    <label>Link de afiliado gerado no Mercado Livre</label>
+                    <input name="affiliate_url" placeholder="Cole aqui o seu link de afiliado" required>
+
+                    <button type="submit">Salvar link</button>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
+
+    item_id = request.form.get("item_id", "").strip()
+    product_name = request.form.get("product_name", "").strip()
+    original_url = request.form.get("original_url", "").strip()
+    affiliate_url = request.form.get("affiliate_url", "").strip()
+
+    if not item_id or not original_url or not affiliate_url:
+        return jsonify({
+            "erro": "item_id, original_url e affiliate_url são obrigatórios."
+        }), 400
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO affiliate_links (
+            item_id, product_name, original_url, affiliate_url, created_at, updated_at
+        )
+        VALUES (%s, %s, %s, %s, NOW(), NOW())
+        ON CONFLICT (item_id)
+        DO UPDATE SET
+            product_name = EXCLUDED.product_name,
+            original_url = EXCLUDED.original_url,
+            affiliate_url = EXCLUDED.affiliate_url,
+            updated_at = NOW()
+    """, (item_id, product_name, original_url, affiliate_url))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({
+        "ok": True,
+        "item_id": item_id,
+        "affiliate_url": affiliate_url
+    })
+
+
+@app.route("/oferta-afiliada")
+def oferta_afiliada():
+    try:
+        termo = request.args.get("q", "iphone")
+
+        with app.test_request_context(f"/produtos?q={termo}"):
+            resposta = produtos()
+
+        if isinstance(resposta, tuple):
+            response_obj, status_code = resposta[0], resposta[1]
+            if status_code >= 400:
+                return resposta
+        else:
+            response_obj = resposta
+
+        data = response_obj.get_json()
+        produtos_lista = data.get("produtos", [])
+
+        validos = [
+            p for p in produtos_lista
+            if p.get("preco") is not None and p.get("link") and p.get("item_id")
+        ]
+
+        if not validos:
+            return jsonify({
+                "erro": "Nenhuma oferta válida encontrada.",
+                "busca": termo
+            }), 404
+
+        melhor = min(validos, key=lambda p: float(p["preco"]))
+        item_id = melhor.get("item_id")
+        affiliate_url = get_affiliate_link(item_id)
+
+        preco_num = float(melhor["preco"])
+        preco_formatado = (
+            f"R$ {preco_num:,.2f}"
+            .replace(",", "X")
+            .replace(".", ",")
+            .replace("X", ".")
+        )
+
+        if not affiliate_url:
+            cadastro_url = (
+                f"/afiliado?item_id={item_id}"
+                f"&nome={melhor.get('nome','')}"
+                f"&link={melhor.get('link','')}"
+            )
+
+            return jsonify({
+                "status": "aguardando_link_afiliado",
+                "busca": termo,
+                "produto": melhor,
+                "cadastro_link": cadastro_url,
+                "instrucao": "Gere o link no Mercado Livre e salve nesta rota."
+            }), 409
+
+        mensagem = (
+            "🔥 OFERTA ENCONTRADA!\n\n"
+            f"📦 {melhor.get('nome', 'Produto')}\n"
+            f"💰 {preco_formatado}\n"
+            f"🛒 Comprar: {affiliate_url}\n\n"
+            "⚠️ Preço e disponibilidade podem mudar a qualquer momento."
+        )
+
+        return jsonify({
+            "busca": termo,
+            "produto": {
+                "id": melhor.get("id"),
+                "item_id": item_id,
+                "nome": melhor.get("nome"),
+                "preco": melhor.get("preco"),
+                "preco_formatado": preco_formatado,
+                "imagem": melhor.get("imagem"),
+                "link_normal": melhor.get("link"),
+                "link_afiliado": affiliate_url,
+                "status": melhor.get("status")
+            },
+            "mensagem": mensagem
+        })
+
+    except Exception as e:
+        return jsonify({
+            "erro": str(e)
+        }), 500
+
 if __name__ == "__main__":
     create_table()
     port = int(os.environ.get("PORT", 10000))
