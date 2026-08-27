@@ -262,7 +262,7 @@ params={
 
         produtos_encontrados = []
 
- for produto in data.get("results", [])[:50]:
+        for produto in data.get("results", [])[:50]:
             product_id = produto.get("id")
             item_id = None
             link = None
